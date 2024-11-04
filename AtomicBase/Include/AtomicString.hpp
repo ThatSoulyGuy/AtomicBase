@@ -76,21 +76,35 @@ public:
             return *this;
         }
 
-        ThreadSafeIterator& operator++() 
+        ThreadSafeIterator& operator++()
         {
             std::unique_lock<std::shared_mutex> lock(container.mutex);
             ++it;
             return *this;
         }
 
-        ThreadSafeIterator operator++(int) 
+        ThreadSafeIterator operator++(int)
         {
             ThreadSafeIterator tmp(*this);
             ++(*this);
             return tmp;
         }
 
-        reference operator*() const 
+        ThreadSafeIterator& operator--()
+        {
+            std::unique_lock<std::shared_mutex> lock(container.mutex);
+            --it;
+            return *this;
+        }
+
+        ThreadSafeIterator operator--(int)
+        {
+            ThreadSafeIterator tmp(*this);
+            --(*this);
+            return tmp;
+        }
+
+        reference operator*() const
         {
             std::shared_lock<std::shared_mutex> lock(container.mutex);
             return *it;

@@ -5,11 +5,147 @@
 #include <algorithm>
 #include <iostream>
 #include <type_traits>
+#include <cassert>
 #include <format>
+
+template <typename T>
+class ThreadSafeIterator
+{
+
+public:
+
+    using string_type = std::basic_string<T>;
+    using iterator_type = typename string_type::iterator;
+    using const_iterator_type = typename string_type::const_iterator;
+    using lock_pointer_type = std::shared_ptr<std::mutex>;
+    using iterator_category = std::bidirectional_iterator_tag;
+    using value_type = T;
+    using difference_type = std::ptrdiff_t;
+    using pointer = T*;
+    using reference = T&;
+
+    ThreadSafeIterator(string_type& str, lock_pointer_type lock) : data(&str), iterator(data->begin()), lock(std::move(lock)) {}
+
+    ThreadSafeIterator(string_type& str, lock_pointer_type lock, bool end) : data(&str), iterator(end ? data->end() : data->begin()), lock(std::move(lock)) {}
+
+    ThreadSafeIterator(const ThreadSafeIterator& other) : data(other.data), iterator(other.iterator), lock(other.lock) {}
+
+    ThreadSafeIterator(ThreadSafeIterator&& other) noexcept : data(other.data), iterator(std::move(other.iterator)), lock(std::move(other.lock)) {}
+
+    ThreadSafeIterator& operator=(const ThreadSafeIterator& other)
+    {
+        if (this != &other) 
+        {
+            std::lock_guard<std::mutex> lockOther(*other.lock);
+            std::lock_guard<std::mutex> lockThis(*lock);
+            data = other.data;
+            iterator = other.iterator;
+            lock = other.lock;
+        }
+
+        return *this;
+    }
+
+    ThreadSafeIterator& operator=(ThreadSafeIterator&& other) noexcept
+    {
+        if (this != &other) 
+        {
+            std::lock_guard<std::mutex> lockThis(*lock);
+            data = other.data;
+            iterator = std::move(other.iterator);
+            lock = std::move(other.lock);
+        }
+
+        return *this;
+    }
+
+    ThreadSafeIterator& operator++()
+    {
+        std::lock_guard<std::mutex> lock(*this->lock);
+
+        if (iterator != data->end())
+            ++iterator;
+
+        return *this;
+    }
+
+    ThreadSafeIterator operator++(int)
+    {
+        std::lock_guard<std::mutex> lock(*this->lock);
+
+        ThreadSafeIterator temp = *this;
+        ++(*this);
+
+        return temp;
+    }
+
+    ThreadSafeIterator& operator--()
+    {
+        std::lock_guard<std::mutex> lock(*this->lock);
+
+        if (iterator != data->begin())
+            --iterator;
+
+        return *this;
+    }
+
+    ThreadSafeIterator operator--(int)
+    {
+        std::lock_guard<std::mutex> lock(*this->lock);
+
+        ThreadSafeIterator temp = *this;
+        --(*this);
+
+        return temp;
+    }
+
+    T& operator*()
+    {
+        std::lock_guard<std::mutex> lock(*this->lock);
+        return *iterator;
+    }
+
+    const T& operator*() const
+    {
+        std::lock_guard<std::mutex> lock(*this->lock);
+        return *iterator;
+    }
+
+    bool operator==(const ThreadSafeIterator& other) const
+    {
+        std::lock_guard<std::mutex> lock(*this->lock);
+        return iterator == other.iterator && data == other.data;
+    }
+
+    bool operator!=(const ThreadSafeIterator& other) const
+    {
+        return !(*this == other);
+    }
+
+    static ThreadSafeIterator Begin(string_type& str, lock_pointer_type lock)
+    {
+        return ThreadSafeIterator(str, lock);
+    }
+
+    static ThreadSafeIterator End(string_type& str, lock_pointer_type lock)
+    {
+        return ThreadSafeIterator(str, lock, true);
+    }
+
+private:
+    string_type* data;
+    iterator_type iterator;
+    lock_pointer_type lock;
+};
 
 template <typename T>
 class AtomicString
 {
+    static_assert(
+        std::is_same<T, char>::value || std::is_same<T, wchar_t>::value ||
+        std::is_same<T, char16_t>::value || std::is_same<T, char32_t>::value,
+        "T only supports char, wchar_t, char16_t, and char32_t types."
+        );
 
 public:
 
@@ -38,111 +174,6 @@ public:
     {
         data = Convert<U, T>(std::basic_string<U>(str));
     }
-
-    template <typename T>
-    class ThreadSafeIterator 
-    {
-
-    public:
-
-        using iterator_category = std::bidirectional_iterator_tag;
-        using difference_type = std::ptrdiff_t;
-        using value_type = T;
-        using pointer = T*;
-        using reference = T&;
-
-        class ProxyReference 
-        {
-
-        public:
-
-                return *this;
-            }
-
-            operator T() const 
-            {
-                return *it_;
-            }
-
-        private:
-
-            AtomicString<T>& container_;
-            typename AtomicString<T>::string_type::iterator it_;
-
-        };
-
-        ThreadSafeIterator(AtomicString<T>& container, typename AtomicString<T>::string_type::iterator it) : container_(container), it_(it), lock_(std::make_shared<std::unique_lock<std::shared_mutex>>(container_.mutex)) {}
-
-        ThreadSafeIterator(const ThreadSafeIterator& other) : container_(other.container_), it_(other.it_), lock_(other.lock_) {}
-
-        ThreadSafeIterator& operator=(const ThreadSafeIterator& other) 
-        {
-            if (this != &other) 
-            {
-                container_ = other.container_;
-                it_ = other.it_;
-                lock_ = other.lock_;
-            }
-
-            return *this;
-        }
-
-        ProxyReference operator*()
-        {
-            return ProxyReference(container_, it_);
-        }
-
-        T operator*() const 
-        {
-            return *it_;
-        }
-
-        ThreadSafeIterator& operator++() 
-        {
-            ++it_;
-            return *this;
-        }
-
-        ThreadSafeIterator operator++(int) 
-        {
-            ThreadSafeIterator tmp(*this);
-            ++(*this);
-            return tmp;
-        }
-
-        ThreadSafeIterator& operator--() 
-        {
-            --it_;
-            return *this;
-        }
-
-        ThreadSafeIterator operator--(int)
-        {
-            ThreadSafeIterator tmp(*this);
-            --(*this);
-
-            return tmp;
-        }
-
-        bool operator==(const ThreadSafeIterator& other) const 
-        {
-            if (&container_ != &other.container_)
-                return false;
-
-            return it_ == other.it_;
-        }
-
-        bool operator!=(const ThreadSafeIterator& other) const 
-        {
-            return !(*this == other);
-        }
-
-    private:
-
-        AtomicString<T>& container_;
-        typename AtomicString<T>::string_type::iterator it_;
-        std::shared_ptr<std::unique_lock<std::shared_mutex>> lock_;
-    };
 
     AtomicString& operator=(AtomicString&& other) noexcept
     {
@@ -545,14 +576,14 @@ public:
         std::transform(data.begin(), data.end(), data.begin(), ::tolower);
     }
 
-    ThreadSafeIterator<T> begin()
+    ThreadSafeIterator<T> begin() 
     {
-        return ThreadSafeIterator<T>(*this, data.begin());
+        return ThreadSafeIterator<T>::Begin(data, iteratorMutex);
     }
 
-    ThreadSafeIterator<T> end()
+    ThreadSafeIterator<T> end() 
     {
-        return ThreadSafeIterator<T>(*this, data.end());
+        return ThreadSafeIterator<T>::End(data, iteratorMutex);
     }
 
 	size_t Length() const
@@ -642,6 +673,7 @@ private:
 	friend auto operator-(const AtomicString<T1>& lhs, const AtomicString<T2>& rhs);
 
     mutable std::shared_mutex mutex;
+    std::shared_ptr<std::mutex> iteratorMutex = std::make_shared<std::mutex>();
 
     std::basic_string<T> data;
 

@@ -1,6 +1,7 @@
 #include <chrono>
 #include <iostream>
 #include <thread>
+#include "AtomicString.hpp"
 
 using AStr = AtomicString<char>;
 
@@ -24,40 +25,46 @@ void upper_modify(AStr& astr)
 	}
 }
 
-void to_ones(AStr& astr)
+void to_ones(AStr& astr) 
 {
-	for (int i = 0; i < 15; ++i)
+	auto midpoint = astr.begin();
+	std::advance(midpoint, astr.Length() / 2);
+
+	std::ostringstream buffer;
+
+	for (int i = 0; i < 15; ++i) 
 	{
-		for (auto it = astr.begin(); it != astr.end(); ++it)
+		for (auto it = midpoint; it != astr.end(); ++it)
 		{
 			*it = '1';
 			std::this_thread::sleep_for(std::chrono::milliseconds(3));
 		}
 
-		std::cout << astr << std::endl;
+		buffer << astr << '\n';
 	}
+
+	std::cout << buffer.str();
 }
 
 void to_nines(AStr& astr)
 {
-	for (int i = 0; i < 15; ++i)
+	auto midpoint = astr.begin();
+	std::advance(midpoint, astr.Length() / 2);
+
+	std::ostringstream buffer;
+
+	for (int i = 0; i < 15; ++i) 
 	{
-		auto it_end = astr.end();
-
-		if (it_end == astr.begin()) 
-			continue;
-
-		--it_end;
-		for (auto it = it_end; ; --it)
+		for (auto it = astr.begin(); it != midpoint; ++it) 
 		{
 			*it = '9';
 			std::this_thread::sleep_for(std::chrono::milliseconds(10));
-			if (it == astr.begin())
-				break;
 		}
 
-		std::cout << astr << std::endl;
+		buffer << astr << '\n';
 	}
+
+	std::cout << buffer.str();
 }
 
 int main()
@@ -84,7 +91,8 @@ int main()
 	t3.join();
 	t4.join();
 
-	std::cout << "... iterator test complete!  Output should be uniformly 1s or 9s " << std::endl;
+	std::cout << "... iterator test complete!  Output should be uniformly 1s or 9s. If you see parts of the original string leaking into the newly formatted one during iterator tests, that is NOT ThreadSafeIterator's fault, rather just the way std::cout handles printing." << std::endl;
+	std::cout << "std::cout is not thread-safe when accessed from multiple threads. Even if ThreadSafeIterator is managing concurrent iteration and modification safely, simultaneous calls to std::cout << astr << std::endl; from two threads can result in interleaved or partially overwritten output, which leads to visible artifacts (e.g., partial remnants like \"LDHO\")" << std::endl;
 
 	return 0;
 }

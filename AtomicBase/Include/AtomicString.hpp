@@ -41,7 +41,6 @@ public:
         data = Convert<U, T>(std::basic_string<U>(str));
     }
 
-    template <typename T>
     class ThreadSafeIterator 
     {
 
@@ -66,8 +65,6 @@ public:
         {
             if (this != &other) 
             {
-                std::scoped_lock lock(container.mutex, other.container.mutex);
-
                 container = other.container;
 
                 it = other.it;
@@ -102,18 +99,6 @@ public:
             ThreadSafeIterator tmp(*this);
             --(*this);
             return tmp;
-        }
-
-        reference operator*() const
-        {
-            std::shared_lock<std::shared_mutex> lock(container.mutex);
-            return *it;
-        }
-
-        pointer operator->() const 
-        {
-            std::shared_lock<std::shared_mutex> lock(container.mutex);
-            return &(*it);
         }
 
         bool operator==(const ThreadSafeIterator& other) const 

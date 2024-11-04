@@ -41,87 +41,77 @@ public:
         data = Convert<U, T>(std::basic_string<U>(str));
     }
 
-    template <typename T>
-    class ThreadSafeIterator 
+    class ThreadSafeIterator
     {
 
     public:
-        
+
         using iterator_category = std::forward_iterator_tag;
         using difference_type = std::ptrdiff_t;
         using value_type = T;
         using pointer = T*;
         using reference = T&;
 
-        ThreadSafeIterator(AtomicString<T>& container, typename std::basic_string<T>::iterator it) : container(container), it(it) {}
+        ThreadSafeIterator(AtomicString& container, typename std::basic_string<T>::iterator it) : container(&container), it(it), lockHolder(std::make_shared<LockHolder>(container.mutex)) { }
 
-        ThreadSafeIterator(const ThreadSafeIterator& other)
-        {
-            std::shared_lock<std::shared_mutex> lock(other.container.mutex);
-            container = other.container;
-            it = other.it;
-        }
+		ThreadSafeIterator(const ThreadSafeIterator& other) : container(other.container), it(other.it), lockHolder(other.lockHolder) { }
 
-        ThreadSafeIterator& operator=(const ThreadSafeIterator& other) 
+        ThreadSafeIterator& operator=(const ThreadSafeIterator& other)
         {
-            if (this != &other) 
+            if (this != &other)
             {
-                std::scoped_lock lock(container.mutex, other.container.mutex);
-
                 container = other.container;
-
                 it = other.it;
+                lockHolder = other.lockHolder;
             }
 
             return *this;
         }
 
-        ThreadSafeIterator& operator++() 
+        ThreadSafeIterator& operator++()
         {
-            std::unique_lock<std::shared_mutex> lock(container.mutex);
             ++it;
             return *this;
         }
 
-        ThreadSafeIterator operator++(int) 
+        ThreadSafeIterator operator++(int)
         {
-            ThreadSafeIterator tmp(*this);
-            ++(*this);
+            ThreadSafeIterator tmp = *this;
+            ++it;
             return tmp;
         }
 
-        reference operator*() const 
+        bool operator!=(const ThreadSafeIterator& other) const
         {
-            std::shared_lock<std::shared_mutex> lock(container.mutex);
-            return *it;
+            return it != other.it;
         }
 
-        pointer operator->() const 
+        bool operator==(const ThreadSafeIterator& other) const
         {
-            std::shared_lock<std::shared_mutex> lock(container.mutex);
-            return &(*it);
-        }
-
-        bool operator==(const ThreadSafeIterator& other) const 
-        {
-            if (&container != &other.container) 
-                return false;
-            
-            std::shared_lock<std::shared_mutex> lock(container.mutex);
-            std::shared_lock<std::shared_mutex> other_lock(other.container.mutex);
-
             return it == other.it;
         }
 
-        bool operator!=(const ThreadSafeIterator& other) const 
+        T& operator*() const
         {
-            return !(*this == other);
+            return *it;
         }
 
     private:
 
-        AtomicString<T>& container;
+        class LockHolder
+        {
+
+        public:
+
+            explicit LockHolder(std::shared_mutex& mutex) : lock(mutex) { }
+
+            std::shared_lock<std::shared_mutex> lock;
+
+        };
+
+        AtomicString* container;
         typename std::basic_string<T>::iterator it;
+        std::shared_ptr<LockHolder> lockHolder;
 
     };
 
@@ -526,14 +516,14 @@ public:
         std::transform(data.begin(), data.end(), data.begin(), ::tolower);
     }
 
-    ThreadSafeIterator<T> begin()
+    ThreadSafeIterator begin()
     {
-        return ThreadSafeIterator<T>(*this, data.begin());
+        return ThreadSafeIterator(*this, data.begin());
     }
 
-    ThreadSafeIterator<T> end()
+    ThreadSafeIterator end()
     {
-        return ThreadSafeIterator<T>(*this, data.end());
+        return ThreadSafeIterator(*this, data.end());
     }
 
 	size_t Length() const

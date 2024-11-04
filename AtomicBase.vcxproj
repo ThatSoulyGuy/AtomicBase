@@ -209,7 +209,7 @@
     <ClInclude Include="AtomicBase\Include\AtomicString.hpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="AtomicBase\AtomicBase.cpp" />
+    <ClCompile Include="test\run_tests.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

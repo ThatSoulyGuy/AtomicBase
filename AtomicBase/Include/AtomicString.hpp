@@ -41,77 +41,87 @@ public:
         data = Convert<U, T>(std::basic_string<U>(str));
     }
 
-    class ThreadSafeIterator
+    template <typename T>
+    class ThreadSafeIterator 
     {
 
     public:
-
+        
         using iterator_category = std::forward_iterator_tag;
         using difference_type = std::ptrdiff_t;
         using value_type = T;
         using pointer = T*;
         using reference = T&;
 
-        ThreadSafeIterator(AtomicString& container, typename std::basic_string<T>::iterator it) : container(&container), it(it), lockHolder(std::make_shared<LockHolder>(container.mutex)) { }
+        ThreadSafeIterator(AtomicString<T>& container, typename std::basic_string<T>::iterator it) : container(container), it(it) {}
 
-		ThreadSafeIterator(const ThreadSafeIterator& other) : container(other.container), it(other.it), lockHolder(other.lockHolder) { }
-
-        ThreadSafeIterator& operator=(const ThreadSafeIterator& other)
+        ThreadSafeIterator(const ThreadSafeIterator& other)
         {
-            if (this != &other)
+            std::shared_lock<std::shared_mutex> lock(other.container.mutex);
+            container = other.container;
+            it = other.it;
+        }
+
+        ThreadSafeIterator& operator=(const ThreadSafeIterator& other) 
+        {
+            if (this != &other) 
             {
+                std::scoped_lock lock(container.mutex, other.container.mutex);
+
                 container = other.container;
+
                 it = other.it;
-                lockHolder = other.lockHolder;
             }
 
             return *this;
         }
 
-        ThreadSafeIterator& operator++()
+        ThreadSafeIterator& operator++() 
         {
+            std::unique_lock<std::shared_mutex> lock(container.mutex);
             ++it;
             return *this;
         }
 
-        ThreadSafeIterator operator++(int)
+        ThreadSafeIterator operator++(int) 
         {
-            ThreadSafeIterator tmp = *this;
-            ++it;
+            ThreadSafeIterator tmp(*this);
+            ++(*this);
             return tmp;
         }
 
-        bool operator!=(const ThreadSafeIterator& other) const
+        reference operator*() const 
         {
-            return it != other.it;
+            std::shared_lock<std::shared_mutex> lock(container.mutex);
+            return *it;
         }
 
-        bool operator==(const ThreadSafeIterator& other) const
+        pointer operator->() const 
         {
+            std::shared_lock<std::shared_mutex> lock(container.mutex);
+            return &(*it);
+        }
+
+        bool operator==(const ThreadSafeIterator& other) const 
+        {
+            if (&container != &other.container) 
+                return false;
+            
+            std::shared_lock<std::shared_mutex> lock(container.mutex);
+            std::shared_lock<std::shared_mutex> other_lock(other.container.mutex);
+
             return it == other.it;
         }
 
-        T& operator*() const
+        bool operator!=(const ThreadSafeIterator& other) const 
         {
-            return *it;
+            return !(*this == other);
         }
 
     private:
 
-        class LockHolder
-        {
-
-        public:
-
-            explicit LockHolder(std::shared_mutex& mutex) : lock(mutex) { }
-
-            std::shared_lock<std::shared_mutex> lock;
-
-        };
-
-        AtomicString* container;
+        AtomicString<T>& container;
         typename std::basic_string<T>::iterator it;
-        std::shared_ptr<LockHolder> lockHolder;
 
     };
 
@@ -516,14 +526,14 @@ public:
         std::transform(data.begin(), data.end(), data.begin(), ::tolower);
     }
 
-    ThreadSafeIterator begin()
+    ThreadSafeIterator<T> begin()
     {
-        return ThreadSafeIterator(*this, data.begin());
+        return ThreadSafeIterator<T>(*this, data.begin());
     }
 
-    ThreadSafeIterator end()
+    ThreadSafeIterator<T> end()
     {
-        return ThreadSafeIterator(*this, data.end());
+        return ThreadSafeIterator<T>(*this, data.end());
     }
 
 	size_t Length() const

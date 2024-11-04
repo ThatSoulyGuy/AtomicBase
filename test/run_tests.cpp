@@ -36,6 +36,7 @@ void to_ones(AStr& astr)
 			*it = '1';
 			std::this_thread::sleep_for(std::chrono::milliseconds(3));
 		}
+
 		std::cout << astr << std::endl;
 	}
 }
@@ -44,20 +45,23 @@ void to_nines(AStr& astr)
 {
 	for (int i = 0; i < 15; ++i)
 	{
-		auto it = astr.end();
-		--it;
-		for (; ; --it)
+		auto it_end = astr.end();
+
+		if (it_end == astr.begin()) 
+			continue;
+
+		--it_end;
+		for (auto it = it_end; ; --it)
 		{
 			*it = '9';
-			std::this_thread::sleep_for(std::chrono::milliseconds(3));
+			std::this_thread::sleep_for(std::chrono::milliseconds(10));
 			if (it == astr.begin())
 				break;
 		}
+
 		std::cout << astr << std::endl;
 	}
 }
-
-
 
 int main()
 {

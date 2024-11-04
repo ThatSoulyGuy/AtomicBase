@@ -18,6 +18,9 @@ class AtomicString
 
 public:
 
+    using string_type = std::basic_string<T>;
+    using mutex_type = std::shared_mutex;
+
     AtomicString() = default;
     ~AtomicString() = default;
 
@@ -41,56 +44,85 @@ public:
         data = Convert<U, T>(std::basic_string<U>(str));
     }
 
+    template <typename T>
     class ThreadSafeIterator 
     {
 
     public:
-        
-        using iterator_category = std::forward_iterator_tag;
+
+        using iterator_category = std::bidirectional_iterator_tag;
         using difference_type = std::ptrdiff_t;
         using value_type = T;
         using pointer = T*;
         using reference = T&;
 
-        ThreadSafeIterator(AtomicString<T>& container, typename std::basic_string<T>::iterator it) : container(container), it(it) {}
-
-        ThreadSafeIterator(const ThreadSafeIterator& other)
+        class ProxyReference 
         {
-            std::shared_lock<std::shared_mutex> lock(other.container.mutex);
-            container = other.container;
-            it = other.it;
-        }
+
+        public:
+
+            ProxyReference(AtomicString<T>& container, typename AtomicString<T>::string_type::iterator it) : container_(container), it_(it) {}
+
+            ProxyReference& operator=(const T& value) 
+            {
+                *it_ = value;
+                return *this;
+            }
+
+            operator T() const 
+            {
+                return *it_;
+            }
+
+        private:
+
+            AtomicString<T>& container_;
+            typename AtomicString<T>::string_type::iterator it_;
+
+        };
+
+        ThreadSafeIterator(AtomicString<T>& container, typename AtomicString<T>::string_type::iterator it) : container_(container), it_(it), lock_(std::make_shared<std::unique_lock<std::shared_mutex>>(container_.mutex)) {}
+
+        ThreadSafeIterator(const ThreadSafeIterator& other) : container_(other.container_), it_(other.it_), lock_(other.lock_) {}
 
         ThreadSafeIterator& operator=(const ThreadSafeIterator& other) 
         {
             if (this != &other) 
             {
-                container = other.container;
-
-                it = other.it;
+                container_ = other.container_;
+                it_ = other.it_;
+                lock_ = other.lock_;
             }
 
             return *this;
         }
 
-        ThreadSafeIterator& operator++()
+        ProxyReference operator*()
         {
-            std::unique_lock<std::shared_mutex> lock(container.mutex);
-            ++it;
+            return ProxyReference(container_, it_);
+        }
+
+        T operator*() const 
+        {
+            return *it_;
+        }
+
+        ThreadSafeIterator& operator++() 
+        {
+            ++it_;
             return *this;
         }
 
-        ThreadSafeIterator operator++(int)
+        ThreadSafeIterator operator++(int) 
         {
             ThreadSafeIterator tmp(*this);
             ++(*this);
             return tmp;
         }
 
-        ThreadSafeIterator& operator--()
+        ThreadSafeIterator& operator--() 
         {
-            std::unique_lock<std::shared_mutex> lock(container.mutex);
-            --it;
+            --it_;
             return *this;
         }
 
@@ -98,18 +130,16 @@ public:
         {
             ThreadSafeIterator tmp(*this);
             --(*this);
+
             return tmp;
         }
 
         bool operator==(const ThreadSafeIterator& other) const 
         {
-            if (&container != &other.container) 
+            if (&container_ != &other.container_)
                 return false;
-            
-            std::shared_lock<std::shared_mutex> lock(container.mutex);
-            std::shared_lock<std::shared_mutex> other_lock(other.container.mutex);
 
-            return it == other.it;
+            return it_ == other.it_;
         }
 
         bool operator!=(const ThreadSafeIterator& other) const 
@@ -119,9 +149,9 @@ public:
 
     private:
 
-        AtomicString<T>& container;
-        typename std::basic_string<T>::iterator it;
-
+        AtomicString<T>& container_;
+        typename AtomicString<T>::string_type::iterator it_;
+        std::shared_ptr<std::unique_lock<std::shared_mutex>> lock_;
     };
 
     AtomicString& operator=(AtomicString&& other) noexcept

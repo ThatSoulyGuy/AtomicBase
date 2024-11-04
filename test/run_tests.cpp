@@ -2,9 +2,6 @@
 #include <iostream>
 #include <thread>
 
-
-#include "../AtomicBase/Include/AtomicString.hpp"
-
 using AStr = AtomicString<char>;
 
 void lower_modify(AStr& astr)

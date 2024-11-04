@@ -10,11 +10,6 @@
 template <typename T>
 class AtomicString
 {
-    static_assert(
-        std::is_same<T, char>::value || std::is_same<T, wchar_t>::value ||
-        std::is_same<T, char16_t>::value || std::is_same<T, char32_t>::value,
-        "T only supports char, wchar_t, char16_t, and char32_t types."
-        );
 
 public:
 
@@ -61,11 +56,6 @@ public:
 
         public:
 
-            ProxyReference(AtomicString<T>& container, typename AtomicString<T>::string_type::iterator it) : container_(container), it_(it) {}
-
-            ProxyReference& operator=(const T& value) 
-            {
-                *it_ = value;
                 return *this;
             }
 
